@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Metadata: 
+  License: MIT
+Description: 'AWS CloudFormation template for S3 bucket'
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+Outputs:
+  S3BucketName:
+    Value: !Ref 'S3Bucket'
+    Description: Name of the S3 bucket

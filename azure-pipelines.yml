@@ -1,0 +1,82 @@
+variables:
+- group: aws-variables
+
+name: $(Build.BuildId)
+
+trigger:
+- master
+
+stages:
+  - stage: Build
+    jobs:
+      - job:
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+        - task: AmazonWebServices.aws-vsts-tools.CloudFormationCreateOrUpdateStack.CloudFormationCreateOrUpdateStack@1
+          displayName: 'Create/Update Stack: tfstate-$(regionShort)-$(environmentShort)-$(commonName)'
+          inputs:
+            awsCredentials: '$(awsCredentials)'
+            regionName: '$(region)'
+            stackName: 'tfstate-$(regionShort)-$(environmentShort)-$(commonName)'
+            templateFile: cloudformation/s3bucket.yaml
+            captureStackOutputs: asVariables
+            captureAsSecuredVars: false
+
+        - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+          displayName: 'Install Terraform $(tfVersion)'
+          inputs:
+            terraformVersion: '$(tfVersion)'
+            
+        - task: AmazonWebServices.aws-vsts-tools.AWSShellScript.AWSShellScript@1
+          displayName: 'Build task'
+          inputs:
+            awsCredentials: '$(awsCredentials)'
+            regionName: '$(region)'
+            scriptType: inline
+            inlineScript: "pwsh .ci/Invoke-PipelineTask.ps1 -build"
+          env:
+            citrixExternalIdVariable: $(citrixExternalId)
+            deployPublicSshKeyVariable: $(deployPublicSshKey)
+            externalManagementIpVariable: $(externalManagementIp)
+
+  - stage: Deploy
+    dependsOn: [Build]
+    jobs:
+      - deployment: Deploy_dev
+        pool:
+          vmImage: 'Ubuntu-latest'
+        
+        environment: dev
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+              - checkout: self
+
+              - task: AmazonWebServices.aws-vsts-tools.CloudFormationCreateOrUpdateStack.CloudFormationCreateOrUpdateStack@1
+                displayName: 'Create/Update Stack: tfstate-$(regionShort)-$(environmentShort)-$(commonName)'
+                inputs:
+                  awsCredentials: '$(awsCredentials)'
+                  regionName: '$(region)'
+                  stackName: 'tfstate-$(regionShort)-$(environmentShort)-$(commonName)'
+                  templateFile: cloudformation/s3bucket.yaml
+                  captureStackOutputs: asVariables
+                  captureAsSecuredVars: false
+
+              - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+                displayName: 'Install Terraform $(tfVersion)'
+                inputs:
+                  terraformVersion: '$(tfVersion)'
+                  
+              - task: AmazonWebServices.aws-vsts-tools.AWSShellScript.AWSShellScript@1
+                displayName: 'Deploy task'
+                inputs:
+                  awsCredentials: '$(awsCredentials)'
+                  regionName: '$(region)'
+                  scriptType: inline
+                  inlineScript: "pwsh .ci/Invoke-PipelineTask.ps1 -deploy"
+                env:
+                  citrixExternalIdVariable: $(citrixExternalId)
+                  deployPublicSshKeyVariable: $(deployPublicSshKey)
+                  externalManagementIpVariable: $(externalManagementIp)
